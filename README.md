@@ -2,7 +2,7 @@
 
 # USB HOST Library for the CH375B module
 
-This library should give you control over the CH357B's USB Host capabilitys.
+This library should give you control over the CH375B's USB Host capabilities.
 The end goal is to recieve keyboard input from an USB keyboard, but im not planning on creating a full HID class library.
 
 Developed on an Arduino Nano (ATMega 328p)
