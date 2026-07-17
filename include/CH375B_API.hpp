@@ -74,6 +74,7 @@ class CH375B_API {
   volatile uint8_t status;
   volatile bool interruptFlag;
   static void isr();
+  void (*connectionEventCallback)(uint8_t eventCode);
 
   uint8_t intPin;
 
@@ -82,6 +83,8 @@ class CH375B_API {
   CH375B_API(uint8_t tx, uint8_t rx, uint8_t intPin); 
 
   bool init();
+
+  void setConnectionEventCallback(void (*callback)(uint8_t));
 
   unsigned char read();
   void write(uint16_t c);
@@ -96,6 +99,8 @@ class CH375B_API {
   void cmd_reset_all();
   uint8_t cmd_set_usb_mode(uint8_t mode);
   uint8_t cmd_get_dev_rate();
+  void cmd_set_address(uint8_t address);
+  void cmd_set_usb_addr(uint8_t address);
 };
 
 CH375B_API *CH375B_API::instance = nullptr;
@@ -108,6 +113,7 @@ CH375B_API::CH375B_API(uint8_t tx, uint8_t rx, uint8_t intPin) {
   instance = this;
   port = new SoftwareSerial9(tx, rx, false);
   this->intPin = intPin;
+  this->connectionEventCallback = nullptr;
 }
 
 bool CH375B_API::init() {
@@ -121,12 +127,16 @@ bool CH375B_API::init() {
   return true;
 }
 
+void CH375B_API::setConnectionEventCallback(void (*callback)(uint8_t)) {
+  connectionEventCallback = callback;
+}
+
 unsigned char CH375B_API::read() {
-    if(port->available()) {
-      uint8_t c = port->read();
-      return c & 0xFF;
-    }
-    return 0;
+  if(port->available()) {
+    uint8_t c = port->read();
+    return c & 0xFF;
+  }
+  return 0;
 }
 
 void CH375B_API::write(uint16_t c) {
@@ -158,7 +168,14 @@ uint8_t CH375B_API::waitForInterrupt() {
 
 
 void CH375B_API::isr() {
+  //CH375B_API::instance->cmd(CMD_GET_STATUS);
+  //uint8_t eventCode = CH375B_API::instance->read();
+  //uint8_t eventCode = CH375B_API::instance->getInterruptState();
   CH375B_API::instance->interruptFlag = true;
+  //if(CH375B_API::instance->connectionEventCallback != nullptr && 
+  //  (eventCode == USB_INT_CONNECT || eventCode == USB_INT_DISCONNECT)) {
+  //  //CH375B_API::instance->connectionEventCallback(eventCode);
+  //}
 }
 
 void CH375B_API::waitForConnect() {
@@ -204,4 +221,17 @@ uint8_t CH375B_API::cmd_get_dev_rate() {
   cmd(CMD_GET_DEV_RATE);
   write(0x07); 
   return read();
+}
+
+void CH375B_API::cmd_set_address(uint8_t address) {
+  DEBUGLNH(F("CMD_SET_ADDRESS"));
+  cmd(CMD_SET_ADDRESS);
+  write(address);
+}
+
+
+void CH375B_API::cmd_set_usb_addr(uint8_t address) {
+  DEBUGLNH(F("CMD_SET_USB_ADDR"));
+  cmd(CMD_SET_USB_ADDR);
+  write(address);
 }
