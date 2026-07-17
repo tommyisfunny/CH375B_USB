@@ -1,5 +1,17 @@
 #pragma once
 
+#ifdef CH375B_API_DEBUG
+#define DEBUGLNH(x) Serial.print(F("CH375B_API: "));Serial.println(x)
+#define DEBUGH(x) Serial.print(F("CH375B_API: "));Serial.print(x)
+#define DEBUGLN(x) Serial.println(x)
+#define DEBUG(x) Serial.print(x)
+#else
+#define DEBUGLNH(x) ;
+#define DEBUGH(x) ;
+#define DEBUGLN(x) ;
+#define DEBUG(x) ;
+#endif
+
 #include <Arduino.h>
 #include "SoftwareSerial9.h"
 // commands
@@ -55,8 +67,8 @@
 #define USB_INT_DISK_WRITE 0x1E
 #define USB_INT_DISK_ERR   0x1F
 
-struct CH375_API {
-  static CH375_API *instance;
+class CH375B_API {
+  static CH375B_API *instance;
   SoftwareSerial9 *port;
     
   volatile uint8_t status;
@@ -65,7 +77,11 @@ struct CH375_API {
 
   uint8_t intPin;
 
-  CH375_API(uint8_t s1, uint8_t s2, uint8_t intPin = 3);
+  public:
+  // tx of CH375B, rx of CH375B, int pin
+  CH375B_API(uint8_t tx, uint8_t rx, uint8_t intPin); 
+
+  bool init();
 
   unsigned char read();
   void write(uint16_t c);
@@ -82,22 +98,30 @@ struct CH375_API {
   uint8_t cmd_get_dev_rate();
 };
 
-CH375_API *CH375_API::instance = nullptr;
+CH375B_API *CH375B_API::instance = nullptr;
 
-CH375_API::CH375_API(uint8_t s1, uint8_t s2, uint8_t intPin) {
+CH375B_API::CH375B_API(uint8_t tx, uint8_t rx, uint8_t intPin) {
   if (instance != nullptr) {
-    Serial.println(F("Error: Only one instance of CH375 is allowed."));
+    DEBUGLNH(F("Error: Only one instance of CH375 is allowed."));
     return;
   }
   instance = this;
-  port = new SoftwareSerial9(s1, s2, false);
-  port->begin(9600);
+  port = new SoftwareSerial9(tx, rx, false);
   this->intPin = intPin;
-  pinMode(intPin, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(intPin), isr, FALLING);
 }
 
-unsigned char CH375_API::read() {
+bool CH375B_API::init() {
+  port->begin(9600);
+  pinMode(intPin, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(intPin), isr, FALLING);
+  // get version
+  uint8_t res = cmd_get_ic_ver();
+  DEBUGH(F("CH375B Version: 0x"));
+  DEBUGLN(res); 
+  return true;
+}
+
+unsigned char CH375B_API::read() {
     if(port->available()) {
       uint8_t c = port->read();
       return c & 0xFF;
@@ -105,72 +129,78 @@ unsigned char CH375_API::read() {
     return 0;
 }
 
-void CH375_API::write(uint16_t c) {
+void CH375B_API::write(uint16_t c) {
   port->write9(c);
   delay(1);
 }
 
-void CH375_API::cmd(uint16_t c) {
+void CH375B_API::cmd(uint16_t c) {
   write(c + 0x100); // bit 9 = 1
 }
 
-uint8_t CH375_API::getInterruptState() {
+uint8_t CH375B_API::getInterruptState() {
   interruptFlag = false;
   cmd(CMD_GET_STATUS);
   return read();
 }
 
-uint8_t CH375_API::waitForInterrupt() {
+uint8_t CH375B_API::waitForInterrupt() {
   uint32_t startTime = millis();
   while(!interruptFlag) {
     delay(1);
   }
   uint32_t endTime = millis();
-  Serial.print("Interrupt detected after ");
-  Serial.print(endTime - startTime);
-  Serial.println(" milliseconds.");
+  DEBUGH("Interrupt detected after ");
+  DEBUG(endTime - startTime);
+  DEBUGLN(" milliseconds.");
   return getInterruptState();
 }
 
 
-void CH375_API::isr() {
-  CH375_API::instance->interruptFlag = true;
+void CH375B_API::isr() {
+  CH375B_API::instance->interruptFlag = true;
 }
 
-void CH375_API::waitForConnect() {
-  Serial.println(F("Waiting for USB device to connect..."));
+void CH375B_API::waitForConnect() {
+  DEBUGLNH(F("Waiting for USB device to connect... "));
   uint8_t interruptState = waitForInterrupt();
   while (interruptState != USB_INT_CONNECT) {
-    Serial.print(F("."));
+    DEBUG(F("X"));
     delay(1000);
     interruptState = waitForInterrupt();
   }
-  Serial.println(F("\nUSB device connected!"));
+  DEBUG("\n");
+  DEBUGLNH(F("USB device connected!"));
 }
 
-uint8_t CH375_API::cmd_test_connect() {
+uint8_t CH375B_API::cmd_test_connect() {
+  DEBUGLNH(F("CMD_TEST_CONNECT"));
   cmd(CMD_TEST_CONNECT);
   return read();
 }
 
-uint8_t CH375_API::cmd_get_ic_ver() {
+uint8_t CH375B_API::cmd_get_ic_ver() {
+  DEBUGLNH(F("CMD_GET_IC_VER"));
   cmd(CMD_GET_IC_VER);
-  return read();
+  return read()- 0x80; // remove the bit 7 according to datasheet
 }
 
-void CH375_API::cmd_reset_all() {
+void CH375B_API::cmd_reset_all() {
+  DEBUGLNH(F("CMD_RESET_ALL"));
   cmd(CMD_RESET_ALL);
   delay(200); // wait until reset is done
 }
 
-uint8_t CH375_API::cmd_set_usb_mode(uint8_t mode) {
+uint8_t CH375B_API::cmd_set_usb_mode(uint8_t mode) {
+  DEBUGLNH(F("CMD_SET_USB_MODE"));
   cmd(CMD_SET_USB_MODE);
   write(mode);
   delay(1);
   return read();
 }
 
-uint8_t CH375_API::cmd_get_dev_rate() {
+uint8_t CH375B_API::cmd_get_dev_rate() {
+  DEBUGLNH(F("CMD_GET_DEV_RATE"));
   cmd(CMD_GET_DEV_RATE);
   write(0x07); 
   return read();

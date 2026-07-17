@@ -11,7 +11,7 @@ Developed on a Arduino Nano (ATMega 328p)
 <br>
 [CH357B_USB.hpp](https://github.com/tommyisfunny/CH375B_USB/blob/main/include/CH375B_USB.hpp) : handles USB stuff
 
-## Wiring:
+## Wiring
 
 | Arduino | CH375B |
 |---------|--------|

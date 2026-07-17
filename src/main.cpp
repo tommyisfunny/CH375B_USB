@@ -1,127 +1,72 @@
 #include <Arduino.h>
 #include <SoftwareSerial9.h>
-#include <CH375B_API.hpp>
 
-CH375_API ch375(4, 5, 2); // CH375 connected to pins 4 and 5 of Arduino Nano
+#define CH375B_API_DEBUG
+#include <CH375B_API.hpp>
+#define CH375B_USB_DEBUG
+#include <CH375B_USB.hpp>
+
+CH375B_API ch375_api(4, 5, 2); // tx of CH375B, rx of CH375B, int pin
+CH375B_USB ch375_usb(&ch375_api);
 
 void handleInterruptionState(uint8_t c);
 
 void setup() {
-  //ch375.setEventHandler(handleEvent);
 
   unsigned char res;
   Serial.begin(9600);
 
-  /*** 5.4 CMD_RESET_ALL ***/
-  Serial.println(F("\n## 5.4 CMD_RESET_ALL: Hard resetting CH375"));
-  ch375.cmd_reset_all();
+  ch375_usb.init();
 
-  /*** 5.1 CMD_GET_IC_VER ***/
-  Serial.println(F("\n## 5.1 CMD_GET_IC_VER"));
-  res = ch375.cmd_get_ic_ver();
-  Serial.print(F("CH375B Version: 0x"));
-  Serial.println(res - 0x80, HEX); // remove the bit 7 according to datasheet
+  // wait for a usb device to be connected
+  ch375_api.waitForConnect();
 
-  
-  /*** 5.9 CMD_SET_USB_MODE ***/
-  Serial.println(F("\n## 5.9 CMD_SET_USB_MODE: USB-HOST"));
-  res = ch375.cmd_set_usb_mode(0x05);
-  if (res == CMD_RET_SUCCESS) {
-    Serial.println(F("SET_USB_MODE success"));
-  }
-  else {
-    Serial.println(F("SET_USB_MODE failed"));
-  }
+  // test the conection
+  handleInterruptionState(ch375_api.cmd_test_connect());
 
-  ch375.waitForConnect();
-
-  /*** 5.10 CMD_TEST_CONNECT ***/
-  Serial.println(F("\n## 5.10 CMD_TEST_CONNECT"));
-  handleInterruptionState(ch375.cmd_test_connect());
-
-  // GET Device speed
-  Serial.println(F("\n## GET Device speed"));
-  res = ch375.cmd_get_dev_rate();
-  Serial.print(F("Device speed code: 0x"));
-  Serial.println(res, HEX);
-  if (res == 0x04) {
-    Serial.println(F("Device speed: Low-speed"));
-  }
-  else {
-    Serial.println(F("Device speed: Full-speed"));
-  }
+  // get the devices speed
+  res = ch375_api.cmd_get_dev_rate();
+  if (res == 0x04) Serial.println(F("Device speed: Low-speed"));
+  else             Serial.println(F("Device speed: Full-speed"));
 
   // reset bus
-  Serial.println(F("\n## Reset bus"));
-  res = ch375.cmd_set_usb_mode(0x07);
-  if (res == CMD_RET_SUCCESS) {
-    Serial.println(F("SET_USB_MODE success"));
-  }
-  else {
-    Serial.println(F("SET_USB_MODE failed"));
-  }
-
+  Serial.println(F("Reseting bus"));
+  res = ch375_api.cmd_set_usb_mode(0x07);
+  if (res == CMD_RET_SUCCESS) Serial.println(F("SET_USB_MODE success"));
+  else                        Serial.println(F("SET_USB_MODE failed"));
+  
   delay(1000); // wait for 1 second
 
-  // set to USB host mode
-  Serial.println(F("\n## Set to USB host mode"));
-  res = ch375.cmd_set_usb_mode(0x06);
-  if (res == CMD_RET_SUCCESS) {
-    Serial.println(F("SET_USB_MODE success"));
-  }
-  else {
-    Serial.println(F("SET_USB_MODE failed"));
-  }
+  // set to USB host mode (auto SOF packages)
+  res = ch375_api.cmd_set_usb_mode(0x06);
+  if (res == CMD_RET_SUCCESS) Serial.println(F("SET_USB_MODE success"));
+  else                        Serial.println(F("SET_USB_MODE failed"));
   
-  ch375.waitForConnect();
+  // wait for the device to reconnect
+  ch375_api.waitForConnect();
 
-  // send set address setup packet
-  // Serial.println(F("\n## Send SET_ADDRESS setup packet"));
-  // ch375.cmd(CMD_WR_USB_DATA7);
-  // ch375.write(0x08); // data length
-  // ch375.write(0x00); // bmRequestType: 0x00 (Host to Device, Standard, Device)
-  // ch375.write(0x05); // bRequest: SET_ADDRESS
-  // ch375.write(0x00); // wValue: 1 (new device address)
-  // ch375.write(0x01); //
-  // ch375.write(0x00); // wIndex: 0
-  // ch375.write(0x00); //
-  // ch375.write(0x00); // wLength: 0
-  // ch375.write(0x00); //
-
-  // ch375.cmd(CMD_ISSUE_TKN_X);
-  // ch375.write(0x00); 
-  // ch375.write(0x0D); // setup token to endpoint 0
-
-  // handleInterruptionState(ch375.waitForInterrupt());
-
-  // in 
-  //ch375.cmd(CMD_ISSUE_TOKEN);
-  ////ch375.write(0x00); 
-  //ch375.write(0x09); // in token to endpoint 0
-  //handleInterruptionState(ch375.waitForInterrupt());
-
-  // Set address to 1
+  // Set the devices address to 1
   Serial.println(F("\n## SET ADDRESS"));
-  ch375.cmd(CMD_SET_ADDRESS);
-  ch375.write(0x01); // set address to 1
-  handleInterruptionState(ch375.waitForInterrupt());
+  ch375_api.cmd(CMD_SET_ADDRESS);
+  ch375_api.write(0x01); // set address to 1
+  handleInterruptionState(ch375_api.waitForInterrupt());
 
   Serial.println(F("\n## SET_USB_ADDR"));
-  ch375.cmd(CMD_SET_USB_ADDR);
-  ch375.write(0x01); // set address to 1
+  ch375_api.cmd(CMD_SET_USB_ADDR);
+  ch375_api.write(0x01); // set address to 1
 
   Serial.println("## get device descriptor");
-  ch375.cmd(CMD_GET_DESCR);
-  ch375.write(0x01);
-  handleInterruptionState(ch375.waitForInterrupt());
+  ch375_api.cmd(CMD_GET_DESCR);
+  ch375_api.write(0x01);
+  handleInterruptionState(ch375_api.waitForInterrupt());
 
-  ch375.cmd(CMD_RD_USB_DATA0);
-  uint8_t len = ch375.read();
+  ch375_api.cmd(CMD_RD_USB_DATA0);
+  uint8_t len = ch375_api.read();
   Serial.print(F("LEN: "));
   Serial.println(len);
   uint8_t *buf = new uint8_t[len];
   for(uint8_t i = 0; i < len; i++) {
-    buf[i] = ch375.read();
+    buf[i] = ch375_api.read();
     Serial.println(buf[i], HEX);
   }
 
@@ -138,8 +83,8 @@ void setup() {
 }
 
 void loop() {
-    delay(1000);
-    handleInterruptionState(ch375.waitForInterrupt());
+  //delay(1000);
+  //handleInterruptionState(ch375.waitForInterrupt());
 }
 
 void handleInterruptionState(uint8_t c) {
@@ -186,3 +131,30 @@ void handleInterruptionState(uint8_t c) {
       break;
   }
 }
+
+
+
+  // send set address setup packet
+  // Serial.println(F("\n## Send SET_ADDRESS setup packet"));
+  // ch375.cmd(CMD_WR_USB_DATA7);
+  // ch375.write(0x08); // data length
+  // ch375.write(0x00); // bmRequestType: 0x00 (Host to Device, Standard, Device)
+  // ch375.write(0x05); // bRequest: SET_ADDRESS
+  // ch375.write(0x00); // wValue: 1 (new device address)
+  // ch375.write(0x01); //
+  // ch375.write(0x00); // wIndex: 0
+  // ch375.write(0x00); //
+  // ch375.write(0x00); // wLength: 0
+  // ch375.write(0x00); //
+
+  // ch375.cmd(CMD_ISSUE_TKN_X);
+  // ch375.write(0x00); 
+  // ch375.write(0x0D); // setup token to endpoint 0
+
+  // handleInterruptionState(ch375.waitForInterrupt());
+
+  // in 
+  //ch375.cmd(CMD_ISSUE_TOKEN);
+  ////ch375.write(0x00); 
+  //ch375.write(0x09); // in token to endpoint 0
+  //handleInterruptionState(ch375.waitForInterrupt());
