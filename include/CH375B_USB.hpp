@@ -41,6 +41,6 @@ bool CH375B_USB::init() {
         DEBUGLNH(F("SET_USB_MODE failed"));
         return false;
     }
-
+    
     return true;
 }   
