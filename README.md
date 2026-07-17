@@ -11,6 +11,16 @@ Developed on a Arduino Nano (ATMega 328p)
 <br>
 [CH357B_USB.hpp](https://github.com/tommyisfunny/CH375B_USB/blob/main/include/CH375B_USB.hpp) : handles USB stuff
 
+## Wiring:
+
+| Arduino | CH375B |
+|---------|--------|
+| 5V      | 5V     |
+| GND     | GND    |
+| D5      | RXD    |
+| D4      | TXD    |
+| D2      | INT    |
+
 ## Datasheets
 
 [CH357B datasheet part 1](https://www.wch-ic.com/downloads/CH375DS1_PDF.html)
