@@ -73,6 +73,9 @@
 // usb speeds
 #define USB_SPEED_FULL 0x00
 #define USB_SPEED_LOW  0x02
+// descriptor types
+#define USB_DEVICE_DESCRIPTOR 0x01
+#define USB_CONFIGURATION_DESCRIPTOR 0x02
 
 class CH375B_API {
     static CH375B_API *instance;
@@ -128,6 +131,8 @@ class CH375B_API {
     bool cmd_set_address(uint8_t address);
     void cmd_set_usb_addr(uint8_t address);
     void cmd_set_usb_speed(uint8_t speed);
+    bool cmd_get_descr(uint8_t type);
+    uint8_t cmd_rd_usb_data0(uint8_t *buf, uint8_t size);
 };
 
 CH375B_API *CH375B_API::instance = nullptr;
@@ -369,4 +374,32 @@ void CH375B_API::cmd_set_usb_speed(uint8_t speed) {
     DEBUGLNH(F("CMD_SET_USB_SPEED"));
     cmd(CMD_SET_USB_SPEED);
     write(speed);
+}
+
+bool CH375B_API::cmd_get_descr(uint8_t type) {
+    DEBUGLNH(F("CMD_GET_DESCR"));
+    cmd(CMD_GET_DESCR);
+    write(type);
+    uint8_t result = waitForInterrupt();
+    if (result != USB_INT_SUCCESS) {
+        DEBUGH(F("Failed to get device descriptor: "));
+        DEBUGLN(getResponseString(result));
+        return false;
+    }
+    return true;
+}
+
+
+
+uint8_t CH375B_API::cmd_rd_usb_data0(uint8_t *buf, uint8_t size){
+    DEBUGLNH(F("CMD_RD_USB_DATA0"));
+    DEBUGH(F("SIZE: "));
+    DEBUGLN(size);
+    cmd(CMD_RD_USB_DATA0);
+    uint8_t len = read();
+    
+    for (int i = 0; i < min(len, size); i++) {
+        buf[i] = read();
+    }
+    return min(len, size);
 }

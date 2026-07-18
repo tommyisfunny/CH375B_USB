@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <CH375B_API.hpp>
+#include <USB_structures.h>
 
 #ifdef CH375B_USB_DEBUG
 #define DEBUGLNH(x) Serial.print(F("CH375B_USB: "));Serial.println(x)
@@ -28,7 +29,6 @@ private:
     bool initDevice(bool lowspeed);
     bool readDeviceDescriptor();
 
-    String getResponseString(uint8_t responseCode);
 public:
     CH375B_USB(CH375B_API *api);
 
@@ -121,25 +121,25 @@ bool CH375B_USB::resetBus() {
 
 bool CH375B_USB::readDeviceDescriptor() {
     DEBUGLNH(F("get device descriptor"));
-    api->cmd(CMD_GET_DESCR);
-    api->write(0x01);
-    uint8_t result = api->waitForInterrupt();
-    if (result != USB_INT_SUCCESS) {
-        DEBUGH(F("Failed to get device descriptor: "));
-        DEBUGLN(getResponseString(result));
-        return false;
+    if(!api->cmd_get_descr(USB_DEVICE_DESCRIPTOR)) {
+        DEBUGLNH(F("Failed to read device descriptor"));
     }
 
-    api->cmd(CMD_RD_USB_DATA0);
-    uint8_t len = api->read();
-    DEBUGH(F("LEN: "));
-    DEBUGLN(len);
-    uint8_t *buf = new uint8_t[len];
-    for(uint8_t i = 0; i < len; i++) {
-      buf[i] = api->read();
-      DEBUGLN(buf[i]);
-    }
-    delete[] buf;
+    USB_device_descriptor *desc = new USB_device_descriptor();
+
+
+    api->cmd_rd_usb_data0((uint8_t*) desc, sizeof(*desc));
+
+    DEBUGH(F("bcdUSB: "));
+    DEBUGLN(String(desc->bcdUSB, HEX));
+    DEBUGH(F("maxPacketSize: "));
+    DEBUGLN(String(desc->bMaxPacketSize0));
+    DEBUGH(F("VendorID: "));
+    DEBUGLN(String(desc->idVendor, HEX));
+    DEBUGH(F("PRoductID: "));
+    DEBUGLN(String(desc->idProduct, HEX));
+
+    delete[] desc;
     return true;
 }
 
@@ -148,30 +148,6 @@ void CH375B_USB::handleDisconnect() {
 
     // set to USB host mode (no device)
     api->cmd_set_usb_mode(USB_HOST_MODE_NO_DEVICE);
-}
-
-String CH375B_USB::getResponseString(uint8_t responseCode) {
-    switch(responseCode) {
-      case USB_INT_SUCCESS: return "Success";
-      case USB_INT_CONNECT: return "Device connected";
-      case USB_INT_DISCONNECT: return "Device disconnected";
-      case USB_INT_BUF_OVER: return "Buffer overflow";
-      case USB_INT_DISK_READ: return "Reading from USB storage";
-      case USB_INT_DISK_WRITE: return "Writing to USB storage";
-      case USB_INT_DISK_ERR: return "USB storage error";
-      default:
-        if((responseCode & 0xF0) == 0x20) {
-          switch(responseCode & 0x0F) {
-            case 0xA: return "Device returned NAK";
-            case 0xE: return "Device returned STALL";
-            default:
-              if ((responseCode & 0x03) == 0) return "Device timed out";
-              else return "Device returned unknown error";
-          }
-        }
-        break;
-    }
-    return "code: " + String(responseCode, HEX);
 }
 
 //void CH375B_USB::ch357bEventCallback(uint8_t eventCode) {
