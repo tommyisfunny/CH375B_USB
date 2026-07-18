@@ -66,6 +66,13 @@
 #define USB_INT_DISK_READ  0x1D
 #define USB_INT_DISK_WRITE 0x1E
 #define USB_INT_DISK_ERR   0x1F
+// usb host modes
+#define USB_HOST_MODE_NO_DEVICE 0x05
+#define USB_HOST_MODE_NORMAL    0x06
+#define USB_HOST_MODE_BUS_RESET 0x07
+// usb speeds
+#define USB_SPEED_FULL 0x00
+#define USB_SPEED_LOW  0x02
 
 class CH375B_API {
     static CH375B_API *instance;
@@ -90,7 +97,6 @@ class CH375B_API {
     static void isr();
     void (*connectionEventCallback)(uint8_t eventCode);
 
-    
 
     public:
     // low level read / write
@@ -121,6 +127,7 @@ class CH375B_API {
     bool cmd_set_usb_mode(uint8_t mode);
     bool cmd_set_address(uint8_t address);
     void cmd_set_usb_addr(uint8_t address);
+    void cmd_set_usb_speed(uint8_t speed);
 };
 
 CH375B_API *CH375B_API::instance = nullptr;
@@ -246,7 +253,6 @@ uint8_t CH375B_API::waitForInterrupt() {
   DEBUG(endTime - startTime);
   DEBUGLN(" milliseconds.");
   uint8_t res = getInterruptState();
-  delay(10);
   return res;
 }
 
@@ -357,4 +363,10 @@ void CH375B_API::cmd_set_usb_addr(uint8_t address) {
   DEBUGLNH(F("CMD_SET_USB_ADDR"));
   cmd(CMD_SET_USB_ADDR);
   write(address);
+}
+
+void CH375B_API::cmd_set_usb_speed(uint8_t speed) {
+    DEBUGLNH(F("CMD_SET_USB_SPEED"));
+    cmd(CMD_SET_USB_SPEED);
+    write(speed);
 }

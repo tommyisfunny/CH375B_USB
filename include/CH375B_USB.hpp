@@ -25,7 +25,7 @@ private:
     void handleDisconnect();
 
     bool resetBus();
-    bool initDevice();
+    bool initDevice(bool lowspeed);
     bool readDeviceDescriptor();
 
     String getResponseString(uint8_t responseCode);
@@ -48,7 +48,7 @@ bool CH375B_USB::init() {
     // reset chip
     api->cmd_reset_all();
     // set to usb host mode (no device)
-    if(!api->cmd_set_usb_mode(0x05)) return false;
+    if(!api->cmd_set_usb_mode(USB_HOST_MODE_NO_DEVICE)) return false;
 
     
     return true;
@@ -76,27 +76,31 @@ void CH375B_USB::handleConnect() {
     DEBUGLNH(F("USB device connected"));
     // get the devices speed
     uint8_t res = api->cmd_get_dev_rate();
-    if (res == 0x04) {DEBUGLNH(F("Device speed: Low-speed"));}
-    else             {DEBUGLNH(F("Device speed: Full-speed"));}
+    bool lowspeed = res & 0x10;
+    if (lowspeed) {DEBUGLNH(F("Device speed: Low-speed"));}
+    else          {DEBUGLNH(F("Device speed: Full-speed"));}
 
-    if(!initDevice()) {
+    if(!initDevice(lowspeed)) {
         DEBUGLNH(F("Failed to initialize device"));
     }
 
 }
 
-bool CH375B_USB::initDevice() {
+bool CH375B_USB::initDevice(bool lowspeed = false) {
     // reset bus
     if (!resetBus()) return false;
+
+    // set bus to slow speed if needed
+    if(lowspeed) api->cmd_set_usb_speed(USB_SPEED_LOW);
 
     // wait for the device to reconnect
     api->waitForConnect();
 
     // Set the devices address to 1
     DEBUGLNH(F("Setting device address to 1"));
-    if(!api->cmd_set_address(0x01)) return false;
+    if(!api->cmd_set_address(0x0C)) return false;
 
-    api->cmd_set_usb_addr(0x01);
+    api->cmd_set_usb_addr(0x0C);
 
     if (!readDeviceDescriptor()) return false;
 
@@ -106,12 +110,12 @@ bool CH375B_USB::initDevice() {
 bool CH375B_USB::resetBus() {
     // reset bus
     DEBUGLNH(F("Reseting bus"));
-    if(!api->cmd_set_usb_mode(0x07)) return false;
+    if(!api->cmd_set_usb_mode(USB_HOST_MODE_BUS_RESET)) return false;
   
     delay(10); 
 
     // set to USB host mode (auto SOF packages)
-    if(!api->cmd_set_usb_mode(0x06)) return false;
+    if(!api->cmd_set_usb_mode(USB_HOST_MODE_NORMAL)) return false;
     return true;
 }
 
@@ -143,7 +147,7 @@ void CH375B_USB::handleDisconnect() {
     DEBUGLNH(F("USB device disconnected"));
 
     // set to USB host mode (no device)
-    api->cmd_set_usb_mode(0x05);
+    api->cmd_set_usb_mode(USB_HOST_MODE_NO_DEVICE);
 }
 
 String CH375B_USB::getResponseString(uint8_t responseCode) {
