@@ -7,19 +7,9 @@ The end goal is to recieve keyboard input from an USB keyboard, but im not plann
 
 Developed on an Arduino Nano (ATMega 328p)
 
-[CH375B_API.hpp](https://github.com/tommyisfunny/CH375B_USB/blob/main/include/CH375B_API.hpp) : low level API for interfacing the CH375B. uses software serial for comunication
+[CH375B_API.hpp](https://github.com/tommyisfunny/CH375B_USB/blob/main/include/CH375B_API.hpp) : low level API for interfacing the CH375B. uses the parallel interface of the CH357B.
 <br>
 [CH375B_USB.hpp](https://github.com/tommyisfunny/CH375B_USB/blob/main/include/CH375B_USB.hpp) : handles USB stuff
-
-## Wiring
-
-| Arduino | CH375B |
-|---------|--------|
-| 5V      | 5V     |
-| GND     | GND    |
-| D5      | RXD    |
-| D4      | TXD    |
-| D2      | INT    |
 
 ## Datasheets
 

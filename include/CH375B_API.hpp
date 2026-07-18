@@ -6,14 +6,14 @@
 #define DEBUGLN(x) Serial.println(x)
 #define DEBUG(x) Serial.print(x)
 #else
-#define DEBUGLNH(x) ;
-#define DEBUGH(x) ;
-#define DEBUGLN(x) ;
-#define DEBUG(x) ;
+#define DEBUGLNH(x) delay(10);
+#define DEBUGH(x) delay(10);
+#define DEBUGLN(x) delay(10);
+#define DEBUG(x) delay(10);
 #endif
 
 #include <Arduino.h>
-#include "SoftwareSerial9.h"
+
 // commands
 #define CMD_GET_IC_VER    0x01
 #define CMD_SET_BAUDRATE  0x02
@@ -68,58 +68,85 @@
 #define USB_INT_DISK_ERR   0x1F
 
 class CH375B_API {
-  static CH375B_API *instance;
-  SoftwareSerial9 *port;
+    static CH375B_API *instance;
+
+    // paralell interface
+    uint8_t cs = A0;
+    uint8_t rd = 3;
+    uint8_t wr = A2;
+    uint8_t a0 = 4;
+    uint8_t rst = A1;
+    uint8_t intPin = 2;
+    const uint8_t *dataPins;
+
+    void setupInterface();
+    void dataDirection(uint8_t dir);
+    void setDataValue(uint8_t val);
+    uint8_t getDataValue();
     
-  volatile uint8_t status;
-  volatile bool interruptFlag;
-  static void isr();
-  void (*connectionEventCallback)(uint8_t eventCode);
+    // interrupt stuff
+    volatile uint8_t status;
+    volatile bool interruptFlag;
+    static void isr();
+    void (*connectionEventCallback)(uint8_t eventCode);
 
-  uint8_t intPin;
+    
 
-  public:
-  // tx of CH375B, rx of CH375B, int pin
-  CH375B_API(uint8_t tx, uint8_t rx, uint8_t intPin); 
+    public:
+    // low level read / write
+    unsigned char read();
+    void write(uint16_t c);
+    void cmd(uint16_t c);
 
-  bool init();
 
-  void setConnectionEventCallback(void (*callback)(uint8_t));
+    // tx of CH375B, rx of CH375B, int pin
+    CH375B_API(uint8_t cs, uint8_t rd, uint8_t wr, uint8_t a0, uint8_t rst, uint8_t intPin, const uint8_t *dataPins); 
 
-  unsigned char read();
-  void write(uint16_t c);
-  void cmd(uint16_t c);
-  uint8_t getInterruptState();
-  uint8_t waitForInterrupt();
+    bool init();
 
-  void waitForConnect();
+    void setConnectionEventCallback(void (*callback)(uint8_t));
 
-  uint8_t cmd_test_connect();
-  uint8_t cmd_get_ic_ver();
-  void cmd_reset_all();
-  uint8_t cmd_set_usb_mode(uint8_t mode);
-  uint8_t cmd_get_dev_rate();
-  void cmd_set_address(uint8_t address);
-  void cmd_set_usb_addr(uint8_t address);
+    String getResponseString(uint8_t responseCode);
+    
+    // stuff
+    uint8_t getInterruptState();
+    uint8_t waitForInterrupt();
+    void waitForConnect();
+
+    // commands
+    uint8_t cmd_test_connect();
+    uint8_t cmd_get_ic_ver();
+    uint8_t cmd_get_dev_rate();
+    void cmd_reset_all();
+    bool cmd_set_usb_mode(uint8_t mode);
+    bool cmd_set_address(uint8_t address);
+    void cmd_set_usb_addr(uint8_t address);
 };
 
 CH375B_API *CH375B_API::instance = nullptr;
 
-CH375B_API::CH375B_API(uint8_t tx, uint8_t rx, uint8_t intPin) {
+CH375B_API::CH375B_API(uint8_t cs, uint8_t rd, uint8_t wr, uint8_t a0, uint8_t rst, uint8_t intPin, const uint8_t *dataPins) {
   if (instance != nullptr) {
     DEBUGLNH(F("Error: Only one instance of CH375 is allowed."));
     return;
   }
-  instance = this;
-  port = new SoftwareSerial9(tx, rx, false);
+  this->instance = this;
+  this->cs = cs;
+  this->rd = rd;
+  this->wr = wr;
+  this->a0 = a0;
+  this->rst = rst;
   this->intPin = intPin;
+  this->dataPins = dataPins;
   this->connectionEventCallback = nullptr;
 }
 
 bool CH375B_API::init() {
-  port->begin(9600);
+  setupInterface();
+  
   pinMode(intPin, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(intPin), isr, FALLING);
+
   // get version
   uint8_t res = cmd_get_ic_ver();
   DEBUGH(F("CH375B Version: 0x"));
@@ -127,31 +154,86 @@ bool CH375B_API::init() {
   return true;
 }
 
-void CH375B_API::setConnectionEventCallback(void (*callback)(uint8_t)) {
-  connectionEventCallback = callback;
+// low level parallel interface functions
+
+void CH375B_API::setupInterface() {
+    dataDirection(INPUT);
+    pinMode(cs, OUTPUT);
+    pinMode(rd, OUTPUT);
+    pinMode(wr, OUTPUT);
+    pinMode(a0, OUTPUT);
+    pinMode(rst, INPUT);
+
+    digitalWrite(cs, HIGH);
+    digitalWrite(rd, HIGH);
+    digitalWrite(wr, HIGH);
+    digitalWrite(a0, LOW);
 }
 
-unsigned char CH375B_API::read() {
-  if(port->available()) {
-    uint8_t c = port->read();
-    return c & 0xFF;
-  }
-  return 0;
+void CH375B_API::dataDirection(uint8_t mode) {
+    for (uint8_t i = 0; i < 8; i++) {
+        pinMode(dataPins[i], mode);
+    }
 }
 
-void CH375B_API::write(uint16_t c) {
-  port->write9(c);
-  delay(1);
+void CH375B_API::setDataValue(uint8_t val) {
+    for (uint8_t i = 0; i < 8; i++) {
+        digitalWrite(dataPins[i], (val >> i) & 0x01);
+    }
 }
 
-void CH375B_API::cmd(uint16_t c) {
-  write(c + 0x100); // bit 9 = 1
+uint8_t CH375B_API::getDataValue() {
+    uint8_t val = 0;
+    for (uint8_t i = 0; i < 8; i++) {
+        val |= (digitalRead(dataPins[i]) << i);
+    }
+    return val;
 }
+
+uint8_t CH375B_API::read() {
+    digitalWrite(a0, LOW);
+    dataDirection(INPUT);
+    digitalWrite(cs, LOW);
+    digitalWrite(rd, LOW);
+    delayMicroseconds(1);
+    uint8_t data = getDataValue();
+    digitalWrite(rd, HIGH);
+    digitalWrite(cs, HIGH);
+    return data;
+}
+
+void CH375B_API::write(uint16_t data) {
+    digitalWrite(a0, LOW);
+    dataDirection(OUTPUT);
+    setDataValue(data);
+    digitalWrite(cs, LOW);
+    digitalWrite(wr, LOW);
+    delayMicroseconds(1);
+    digitalWrite(wr, HIGH);
+    digitalWrite(cs, HIGH);
+}
+
+void CH375B_API::cmd(uint16_t cmd) {
+    digitalWrite(a0, HIGH);
+    dataDirection(OUTPUT);
+    setDataValue(cmd);
+    digitalWrite(cs, LOW);
+    digitalWrite(wr, LOW);
+    delayMicroseconds(1);
+    digitalWrite(wr, HIGH);
+    digitalWrite(cs, HIGH);
+}
+
+
+//void CH375B_API::setConnectionEventCallback(void (*callback)(uint8_t)) {
+//  connectionEventCallback = callback;
+//}
 
 uint8_t CH375B_API::getInterruptState() {
   interruptFlag = false;
   cmd(CMD_GET_STATUS);
-  return read();
+  uint8_t res = read();
+  return res;
 }
 
 uint8_t CH375B_API::waitForInterrupt() {
@@ -163,7 +245,9 @@ uint8_t CH375B_API::waitForInterrupt() {
   DEBUGH("Interrupt detected after ");
   DEBUG(endTime - startTime);
   DEBUGLN(" milliseconds.");
-  return getInterruptState();
+  uint8_t res = getInterruptState();
+  delay(10);
+  return res;
 }
 
 
@@ -190,9 +274,36 @@ void CH375B_API::waitForConnect() {
   DEBUGLNH(F("USB device connected!"));
 }
 
+String CH375B_API::getResponseString(uint8_t responseCode) {
+    switch(responseCode) {
+      case USB_INT_SUCCESS: return "Success";
+      case USB_INT_CONNECT: return "Device connected";
+      case USB_INT_DISCONNECT: return "Device disconnected";
+      case USB_INT_BUF_OVER: return "Buffer overflow";
+      case USB_INT_DISK_READ: return "Reading from USB storage";
+      case USB_INT_DISK_WRITE: return "Writing to USB storage";
+      case USB_INT_DISK_ERR: return "USB storage error";
+      default:
+        if((responseCode & 0xF0) == 0x20) {
+          switch(responseCode & 0x0F) {
+            case 0xA: return "Device returned NAK";
+            case 0xE: return "Device returned STALL";
+            default:
+              if ((responseCode & 0x03) == 0) return "Device timed out";
+              else return "Device returned unknown error";
+          }
+        }
+        break;
+    }
+    return "code: " + String(responseCode, HEX);
+}
+
+
+
 uint8_t CH375B_API::cmd_test_connect() {
   DEBUGLNH(F("CMD_TEST_CONNECT"));
   cmd(CMD_TEST_CONNECT);
+  delay(1);
   return read();
 }
 
@@ -208,12 +319,17 @@ void CH375B_API::cmd_reset_all() {
   delay(200); // wait until reset is done
 }
 
-uint8_t CH375B_API::cmd_set_usb_mode(uint8_t mode) {
-  DEBUGLNH(F("CMD_SET_USB_MODE"));
-  cmd(CMD_SET_USB_MODE);
-  write(mode);
-  delay(1);
-  return read();
+bool CH375B_API::cmd_set_usb_mode(uint8_t mode) {
+    DEBUGLNH(F("CMD_SET_USB_MODE"));
+    cmd(CMD_SET_USB_MODE);
+    write(mode);
+    delay(1);
+    uint8_t res = read();
+    if (res != CMD_RET_SUCCESS) {
+        DEBUGLNH(F("SET_USB_MODE failed"));
+        return false;
+    }
+    return true;
 }
 
 uint8_t CH375B_API::cmd_get_dev_rate() {
@@ -223,10 +339,17 @@ uint8_t CH375B_API::cmd_get_dev_rate() {
   return read();
 }
 
-void CH375B_API::cmd_set_address(uint8_t address) {
+bool CH375B_API::cmd_set_address(uint8_t address) {
   DEBUGLNH(F("CMD_SET_ADDRESS"));
   cmd(CMD_SET_ADDRESS);
   write(address);
+  uint8_t res = waitForInterrupt();
+  if(res != USB_INT_SUCCESS) {
+    DEBUGH(F("Failed to set device address: "));
+    DEBUGLN(getResponseString(res));
+    return false;
+  }
+  return true;
 }
 
 

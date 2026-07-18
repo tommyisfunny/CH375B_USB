@@ -42,19 +42,14 @@ CH375B_USB::CH375B_USB(CH375B_API *api)
 }
 
 bool CH375B_USB::init() {
-    uint8_t res;
-
     //api->setConnectionEventCallback(ch357bEventCallback);
 
     api->init();
     // reset chip
     api->cmd_reset_all();
     // set to usb host mode (no device)
-    res = api->cmd_set_usb_mode(0x05);
-    if (res != CMD_RET_SUCCESS) {
-        DEBUGLNH(F("SET_USB_MODE failed"));
-        return false;
-    }
+    if(!api->cmd_set_usb_mode(0x05)) return false;
+
     
     return true;
 }   
@@ -64,9 +59,9 @@ void CH375B_USB::update() {
     uint32_t now = millis();
     static uint8_t lastConnectionState = USB_INT_DISCONNECT;
 
-    if (now - last > 2000) {
+    if (now - last > 1000) {
         last = now;
-        DEBUGLNH(F("Checking for connect / disconnect of USB device"));
+        //DEBUGLNH(F("Checking for connect / disconnect of USB device"));
         uint8_t connectionState = api->cmd_test_connect();
 
         if (connectionState != lastConnectionState) {
@@ -99,13 +94,7 @@ bool CH375B_USB::initDevice() {
 
     // Set the devices address to 1
     DEBUGLNH(F("Setting device address to 1"));
-    api->cmd_set_address(0x01);
-    uint8_t result = api->waitForInterrupt();
-    if (result != USB_INT_SUCCESS) {
-        DEBUGH(F("Failed to set device address: "));
-        DEBUGLN(getResponseString(result));
-        return false;
-    }
+    if(!api->cmd_set_address(0x01)) return false;
 
     api->cmd_set_usb_addr(0x01);
 
@@ -115,22 +104,14 @@ bool CH375B_USB::initDevice() {
 }
 
 bool CH375B_USB::resetBus() {
-     // reset bus
+    // reset bus
     DEBUGLNH(F("Reseting bus"));
-    uint8_t res = api->cmd_set_usb_mode(0x07);
-    if (res != CMD_RET_SUCCESS) {
-        DEBUGLNH(F("SET_USB_MODE failed"));
-        return false;
-    }
+    if(!api->cmd_set_usb_mode(0x07)) return false;
   
     delay(10); 
 
     // set to USB host mode (auto SOF packages)
-    res = api->cmd_set_usb_mode(0x06);
-    if (res != CMD_RET_SUCCESS) {
-        DEBUGLNH(F("SET_USB_MODE failed"));
-        return false;
-    }
+    if(!api->cmd_set_usb_mode(0x06)) return false;
     return true;
 }
 
@@ -162,33 +143,31 @@ void CH375B_USB::handleDisconnect() {
     DEBUGLNH(F("USB device disconnected"));
 
     // set to USB host mode (no device)
-    uint8_t res = api->cmd_set_usb_mode(0x05);
-    if (res != CMD_RET_SUCCESS) {
-        DEBUGLNH(F("SET_USB_MODE failed"));
-    }
+    api->cmd_set_usb_mode(0x05);
 }
 
 String CH375B_USB::getResponseString(uint8_t responseCode) {
     switch(responseCode) {
-      case USB_INT_SUCCESS: return F("Success");
-      case USB_INT_CONNECT: return F("Device connected");
-      case USB_INT_DISCONNECT: return F("Device disconnected");
-      case USB_INT_BUF_OVER: return F("Buffer overflow");
-      case USB_INT_DISK_READ: return F("Reading from USB storage");
-      case USB_INT_DISK_WRITE: return F("Writing to USB storage");
-      case USB_INT_DISK_ERR: return F("USB storage error");
+      case USB_INT_SUCCESS: return "Success";
+      case USB_INT_CONNECT: return "Device connected";
+      case USB_INT_DISCONNECT: return "Device disconnected";
+      case USB_INT_BUF_OVER: return "Buffer overflow";
+      case USB_INT_DISK_READ: return "Reading from USB storage";
+      case USB_INT_DISK_WRITE: return "Writing to USB storage";
+      case USB_INT_DISK_ERR: return "USB storage error";
       default:
         if((responseCode & 0xF0) == 0x20) {
           switch(responseCode & 0x0F) {
-            case 0xA: return F("Device returned NAK");
-            case 0xE: return F("Device returned STALL");
+            case 0xA: return "Device returned NAK";
+            case 0xE: return "Device returned STALL";
             default:
-              if ((responseCode & 0x03) == 0) return F("Device timed out");
-              else return F("Device returned unknown error");
+              if ((responseCode & 0x03) == 0) return "Device timed out";
+              else return "Device returned unknown error";
           }
         }
         break;
     }
+    return "code: " + String(responseCode, HEX);
 }
 
 //void CH375B_USB::ch357bEventCallback(uint8_t eventCode) {
